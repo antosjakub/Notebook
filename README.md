@@ -12,7 +12,7 @@ After installing the launcher, run `ks-notebook diplom.md` from any folder. It r
 
 Run `ks-notebook-live diplom.md` for a one-way live preview. Saving the file in Neovim updates the notebook preview within about a second. Live notes always open in Preview, and their Edit and Split controls are disabled; the terminal file remains the source of truth.
 
-Vim mode is enabled by default and uses CodeMirror's full Vim keymap. Normal mode uses a block cursor, Insert mode uses a line cursor, and the badge above the editor reports the current mode. The toggle remembers your choice. The renderer supports headings, paragraphs, lists, fenced code, emphasis, inline code, and HTTP(S) links; it escapes raw HTML.
+Vim mode is enabled by default and uses CodeMirror's full Vim keymap. Normal mode uses a block cursor, Insert mode uses a line cursor, and the badge above the editor reports the current mode. The toggle remembers your choice. The renderer supports headings, paragraphs, tables, lists, fenced code, emphasis, inline code, LaTeX, and HTTP(S) links; it escapes raw HTML.
 
 Writes use candidate-state transactions. If local storage rejects a write, committed data is left unchanged and the text remains in the editor with an unsaved-status message. A later edit retries the save.
 

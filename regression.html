@@ -69,5 +69,13 @@ cases.push(['LaTeX rendering',async()=>{
   edit('$\\href{javascript:alert(1)}{bad}$ <img src=x onerror=alert(1)>');
   assert(!$('#preview img')&&!$('#preview a[href^="javascript:"]'),'unsafe markup rendered');
 }]);
+cases.push(['Markdown tables',async()=>{
+  await reset();click('#tree .note');
+  edit('| Name | Value |\\n| --- | --- |\\n| **A** | $x^2$ |');
+  assert($('#preview table'),'table element absent');
+  assert($('#preview th')?.textContent==='Name','table header absent');
+  assert($('#preview td strong')?.textContent==='A','table Markdown absent');
+  assert($('#preview td .katex'),'table LaTeX absent');
+}]);
 for(const [name,fn] of cases){try{await fn();passed++;line('PASS '+name)}catch(e){failed++;line('FAIL '+name+': '+(e.stack||e))}finally{restore()}}}catch(e){failed++;line('FAIL harness setup: '+(e.stack||e))}restore();out.textContent+='\nRESULT '+(failed?'FAIL':'PASS')+' — '+passed+' passed, '+failed+' failed';out.dataset.result=failed?'fail':'pass'})();
 </script></html>

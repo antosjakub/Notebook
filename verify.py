@@ -29,6 +29,8 @@ checks = [
         'new Blob([note.content]'))),
     ('safe Markdown rendering', all(token in app for token in (
         'function escapeHtml(text)', "https?:\\/\\/", 'rel="noopener noreferrer"'))),
+    ('Markdown tables', all(token in app for token in (
+        'const tableRow = line', 'const tableSeparator = line', '<table><thead>', '<tbody>'))),
     ('CodeMirror Vim integration', all(token in html for token in (
         'codemirror.min.js', 'mode/markdown/markdown.min.js', 'keymap/vim.min.js',
         'fieldnotes-editor.js', 'id="editorModeBadge"')) and all(token in app for token in (

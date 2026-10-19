@@ -175,6 +175,10 @@ textarea:disabled { color: var(--text-faint); }
 #preview pre { overflow: auto; padding: .8rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
 #preview pre code { padding: 0; background: transparent; }
 #preview .katex-display { overflow-x: auto; overflow-y: hidden; padding: .3rem 0; }
+#preview table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+#preview th, #preview td { padding: .45rem .65rem; border: 1px solid var(--border); text-align: left; }
+#preview th { color: var(--text); background: var(--surface-2); font-weight: 600; }
+#preview tr:nth-child(even) td { background: rgba(255, 255, 255, .025); }
 
 .project-row { display: flex; align-items: center; }
 .project-toggle {

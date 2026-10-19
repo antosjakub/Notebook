@@ -125,6 +125,20 @@ function markdown(source) {
 function markdownBlocks(source) {
   const lines = source.split(/\r?\n/);
   const output = [];
+  const tableRow = line => {
+    if (!line.includes('|')) return null;
+    const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+    return trimmed.split(/(?<!\\)\|/).map(cell => cell.trim().replace(/\\\|/g, '|'));
+  };
+  const tableSeparator = line => {
+    const cells = tableRow(line);
+    return cells?.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+  };
+  const tableHtml = (header, rows) => {
+    const headings = header.map(cell => `<th scope="col">${inline(cell)}</th>`).join('');
+    const body = rows.map(row => `<tr>${header.map((_, index) => `<td>${inline(row[index] || '')}</td>`).join('')}</tr>`).join('');
+    return `<table><thead><tr>${headings}</tr></thead>${body ? `<tbody>${body}</tbody>` : ''}</table>`;
+  };
   let paragraph = [];
   const flush = () => {
     if (paragraph.length) output.push(`<p>${paragraph.map(inline).join('<br>')}</p>`);
@@ -139,6 +153,16 @@ function markdownBlocks(source) {
       index += 1;
       while (index < lines.length && !/^```/.test(lines[index])) code.push(lines[index++]);
       output.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
+      continue;
+    }
+    if (tableRow(line) && index + 1 < lines.length && tableSeparator(lines[index + 1])) {
+      flush();
+      const header = tableRow(line);
+      index += 2;
+      const rows = [];
+      while (index < lines.length && tableRow(lines[index]) && !tableSeparator(lines[index])) rows.push(tableRow(lines[index++]));
+      output.push(tableHtml(header, rows));
+      index -= 1;
       continue;
     }
     const heading = line.match(/^(#{1,6})\s+(.+)/);
