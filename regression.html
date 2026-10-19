@@ -10,6 +10,19 @@ try{await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('if
 ['preferences and view/live-preview wiring',async()=>{await reset();click('#tree .note');click('[data-view="preview"]');assert($('#panes').classList.contains('view-preview'),'view class absent');edit('**live**');assert($('#preview strong')?.textContent==='live','live preview absent');click('#vimToggle');assert($('#vimToggle').checked,'toggle failed')}],
 ['Markdown import/export fidelity',async()=>{await reset();click('#tree .note');let text='# Exact\r\n\r\nline',file=new w.File([text],'fidelity.md',{type:'text/markdown'});Object.defineProperty($('#file'),'files',{configurable:true,value:[file]});$('#file').dispatchEvent(new w.Event('change'));await wait(50);assert(JSON.parse(w.localStorage.getItem(key)).notes[0].content===text,'import altered content');assert(typeof w.Blob==='function','export Blob API missing');click('#export')}],
 ['CodeMirror Vim append and cursor modes',async()=>{await reset();click('#tree .note');const instance=cm();instance.setValue('abc\ndef');instance.setCursor({line:0,ch:0});click('#vimToggle');instance.focus();await wait(20);assert(instance.getWrapperElement().classList.contains('cm-fat-cursor'),'Normal mode has no block cursor');assert($('#editorModeBadge').textContent==='NORMAL','Normal mode badge absent');w.CodeMirror.Vim.handleKey(instance,'a');assert($('#editorModeBadge').textContent==='INSERT','a did not enter Insert mode (badge='+$('#editorModeBadge').textContent+', insert='+instance.state.vim?.insertMode+')');assert(!instance.getWrapperElement().classList.contains('cm-fat-cursor'),'Insert mode retained block cursor');instance.replaceSelection('X','end');w.CodeMirror.Vim.handleKey(instance,'<Esc>');assert(instance.getValue()==='aXbc\ndef','a did not append after the cursor');assert($('#editorModeBadge').textContent==='NORMAL','Escape did not return to Normal mode');assert(instance.getWrapperElement().classList.contains('cm-fat-cursor'),'Normal block cursor was not restored')}]];
+cases.push(['collapsible projects and sidebar',async()=>{
+  await reset();
+  assert($('#tree .note'),'seed note missing');
+  click('#tree .project-toggle');
+  assert(!$('#tree .note'),'project notes did not collapse');
+  click('#tree .project-toggle');
+  assert($('#tree .note'),'project notes did not expand');
+  click('#toggleSidebar');
+  assert(d.body.classList.contains('sidebar-collapsed'),'sidebar did not collapse');
+  assert($('#toggleSidebar').getAttribute('aria-expanded')==='false','sidebar state is not announced');
+  click('#toggleSidebar');
+  assert(!d.body.classList.contains('sidebar-collapsed'),'sidebar did not expand');
+}]);
 cases.push(['Vim keyboard routing, visual mode, undo and toggle',async()=>{
   await reset();click('#tree .note');const instance=cm();
   edit('abc\ndef');instance.setCursor(0,0);click('#vimToggle');instance.focus();

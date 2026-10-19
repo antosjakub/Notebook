@@ -8,14 +8,17 @@ const preview = $('#preview');
 const tree = $('#tree');
 const storageMode = new URLSearchParams(location.search).get('storage');
 const KEY = storageMode === 'regression' ? 'fieldnotes.regression.test.v1' : 'fieldnotes.v1';
-const EMPTY = { projects: [], notes: [], preferences: { view: 'split', vim: true } };
+const EMPTY = { projects: [], notes: [], preferences: { view: 'split', vim: true, sidebar: true } };
 
 let state = structuredClone(EMPTY);
 let current = null;
 let activeProject = null;
 let view = 'split';
 let vim = false;
+let sidebar = true;
 let saveTimer;
+let liveTimer;
+const collapsedProjects = new Set();
 
 function editorValue() {
   return editorBridge?.getValue() ?? editor.value;
@@ -163,6 +166,7 @@ function render() {
 }
 
 function setView(nextView, save = true) {
+  if (selectedNote()?.live && nextView !== 'preview') return;
   view = nextView;
   $('#panes').className = `view-${view}`;
   document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
@@ -170,15 +174,42 @@ function setView(nextView, save = true) {
   if (save) commit(next => { next.preferences.view = view; });
 }
 
+function setSidebar(nextSidebar, save = true) {
+  sidebar = nextSidebar;
+  document.body.classList.toggle('sidebar-collapsed', !sidebar);
+  const button = $('#toggleSidebar');
+  button.setAttribute('aria-expanded', String(sidebar));
+  button.textContent = sidebar ? '☰ Notes' : '☰ Show notes';
+  requestAnimationFrame(() => editorBridge?.refresh());
+  if (save) commit(next => { next.preferences.sidebar = sidebar; });
+}
+
 function draw() {
   tree.replaceChildren();
   for (const project of state.projects) {
+    const projectRow = document.createElement('div');
+    projectRow.className = 'project-row';
+    const isCollapsed = collapsedProjects.has(project.id);
+    const collapseButton = document.createElement('button');
+    collapseButton.className = 'project-toggle';
+    collapseButton.type = 'button';
+    collapseButton.textContent = isCollapsed ? '▸' : '▾';
+    collapseButton.title = isCollapsed ? 'Expand notes' : 'Collapse notes';
+    collapseButton.setAttribute('aria-label', collapseButton.title);
+    collapseButton.setAttribute('aria-expanded', String(!isCollapsed));
+    collapseButton.onclick = () => {
+      if (collapsedProjects.has(project.id)) collapsedProjects.delete(project.id);
+      else collapsedProjects.add(project.id);
+      draw();
+    };
     const projectButton = document.createElement('button');
     projectButton.className = `project${project.id === activeProject ? ' selected-project' : ''}`;
     projectButton.textContent = project.name;
     projectButton.title = 'Use this project for a new note';
     projectButton.onclick = () => { activeProject = project.id; draw(); };
-    tree.append(projectButton);
+    projectRow.append(collapseButton, projectButton);
+    tree.append(projectRow);
+    if (isCollapsed) continue;
     for (const note of state.notes.filter(item => item.project === project.id)) {
       const noteButton = document.createElement('button');
       noteButton.className = `note${note.id === current ? ' selected' : ''}`;
@@ -190,16 +221,54 @@ function draw() {
 }
 
 function select(id) {
+  clearInterval(liveTimer);
   current = id;
   const note = selectedNote();
   if (note) activeProject = note.project;
-  editor.disabled = !note;
+  const live = Boolean(note?.live);
+  editor.disabled = !note || live;
   editor.value = note?.content || '';
-  editorBridge?.setDisabled(!note);
+  editorBridge?.setDisabled(!note || live);
   editorBridge?.setValue(note?.content || '');
   $('#title').textContent = note?.name || 'Choose a note';
+  document.body.classList.toggle('live-note', live);
+  document.querySelectorAll('[data-view="edit"], [data-view="split"]').forEach(button => { button.disabled = live; });
+  if (live && view !== 'preview') setView('preview');
   render();
   draw();
+  if (live) startLiveSync(note);
+}
+
+function startLiveSync(note) {
+  let busy = false;
+  const refresh = async () => {
+    if (busy || current !== note.id) return;
+    busy = true;
+    try {
+      const response = await fetch(`/api/live/${encodeURIComponent(note.live.token)}`, { cache: 'no-store' });
+      if (!response.ok) throw Error('source file is unavailable');
+      const file = await response.json();
+      if (typeof file?.content !== 'string' || typeof file?.revision !== 'string') throw Error('invalid live file response');
+      if (file.revision === selectedNote()?.live?.revision) return;
+      if (!commit(next => {
+        const target = next.notes.find(item => item.id === note.id);
+        if (target) {
+          target.content = file.content;
+          target.live.revision = file.revision;
+        }
+      })) return;
+      editor.value = file.content;
+      editorBridge?.setValue(file.content);
+      render();
+      say(`Updated from ${note.name}`);
+    } catch (error) {
+      say(`Live preview paused: ${error.message}`);
+    } finally {
+      busy = false;
+    }
+  };
+  refresh();
+  liveTimer = setInterval(refresh, 1000);
 }
 
 function queueSave(noteId, text) {
@@ -273,7 +342,7 @@ $('#delete').onclick = () => {
 };
 
 editor.addEventListener('input', () => {
-  if (!current) return;
+  if (!current || selectedNote()?.live) return;
   render();
   queueSave(current, editorValue());
 });
@@ -281,6 +350,8 @@ editor.addEventListener('input', () => {
 document.querySelectorAll('[data-view]').forEach(button => {
   button.onclick = () => setView(button.dataset.view);
 });
+
+$('#toggleSidebar').onclick = () => setSidebar(!sidebar);
 
 $('#import').onclick = () => $('#file').click();
 $('#file').onchange = async event => {
@@ -329,13 +400,14 @@ $('#vimToggle').onchange = event => {
 
 async function importTerminalFile() {
   const url = new URL(location.href);
-  const token = url.searchParams.get('terminal-import');
+  const live = url.searchParams.has('terminal-live');
+  const token = url.searchParams.get(live ? 'terminal-live' : 'terminal-import');
   if (!token) return;
-  url.searchParams.delete('terminal-import');
+  url.searchParams.delete(live ? 'terminal-live' : 'terminal-import');
   history.replaceState(null, '', url);
   try {
-    const response = await fetch(`/api/import/${encodeURIComponent(token)}`, { cache: 'no-store' });
-    if (!response.ok) throw Error('the queued import was not found');
+    const response = await fetch(`/api/${live ? 'live' : 'import'}/${encodeURIComponent(token)}`, { cache: 'no-store' });
+    if (!response.ok) throw Error(live ? 'the live file was not found' : 'the queued import was not found');
     const file = await response.json();
     if (typeof file?.name !== 'string' || typeof file?.content !== 'string') throw Error('the queued import is invalid');
     let target;
@@ -345,24 +417,29 @@ async function importTerminalFile() {
         project = { id: makeId(), name: 'Imported' };
         next.projects.push(project);
       }
-      const note = { id: makeId(), project: project.id, name: file.name || 'Untitled', content: file.content };
+      const note = {
+        id: makeId(), project: project.id, name: file.name || 'Untitled', content: file.content,
+        ...(live ? { live: { token, revision: file.revision || '' } } : {}),
+      };
       next.notes.push(note);
       target = note.id;
     });
     if (!imported) throw Error('the note could not be saved locally');
     select(target);
-    say(`Imported ${file.name}`);
+    say(live ? `Live previewing ${file.name}` : `Imported ${file.name}`);
   } catch (error) {
-    say(`Terminal import failed: ${error.message}`);
+    say(`${live ? 'Live preview' : 'Terminal import'} failed: ${error.message}`);
   }
 }
 
 state = load();
 view = state.preferences.view;
 vim = Boolean(state.preferences.vim);
+sidebar = state.preferences.sidebar !== false;
 $('#vimToggle').checked = vim;
 editorBridge?.setVim(vim);
 draw();
 setView(view, false);
+setSidebar(sidebar, false);
 select(null);
 importTerminalFile();

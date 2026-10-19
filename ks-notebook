@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import hashlib
 import subprocess
 import sys
 import time
@@ -20,6 +21,7 @@ APP_ROOT = Path(__file__).resolve().parent
 PORT = 43117
 DATA_ROOT = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'ks-notebook'
 IMPORT_ROOT = DATA_ROOT / 'imports'
+LIVE_ROOT = DATA_ROOT / 'live'
 
 
 class NotebookHandler(SimpleHTTPRequestHandler):
@@ -31,11 +33,31 @@ class NotebookHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
-        if not path.startswith('/api/import/'):
-            return super().do_GET()
-        token = unquote(path.removeprefix('/api/import/'))
+        if path.startswith('/api/import/'):
+            return self.send_import(path)
+        if path.startswith('/api/live/'):
+            return self.send_live(path)
+        return super().do_GET()
+
+    def token_from_path(self, path, prefix):
+        token = unquote(path.removeprefix(prefix))
         if len(token) != 32 or any(char not in '0123456789abcdef' for char in token):
             self.send_error(404)
+            return None
+        return token
+
+    def send_json(self, data):
+        body = json.dumps(data).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_import(self, path):
+        token = self.token_from_path(path, '/api/import/')
+        if not token:
             return
         job = IMPORT_ROOT / f'{token}.json'
         try:
@@ -45,13 +67,24 @@ class NotebookHandler(SimpleHTTPRequestHandler):
         except (FileNotFoundError, OSError, json.JSONDecodeError):
             self.send_error(404)
             return
-        body = json.dumps(data).encode('utf-8')
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(body)
+        self.send_json(data)
+
+    def send_live(self, path):
+        token = self.token_from_path(path, '/api/live/')
+        if not token:
+            return
+        try:
+            job = json.loads((LIVE_ROOT / f'{token}.json').read_text(encoding='utf-8'))
+            source = Path(job['path'])
+            content = source.read_text(encoding='utf-8')
+        except (FileNotFoundError, OSError, KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+            self.send_error(404)
+            return
+        self.send_json({
+            'name': job['name'],
+            'content': content,
+            'revision': hashlib.sha256(content.encode('utf-8')).hexdigest(),
+        })
 
 
 def server_url():
@@ -97,26 +130,42 @@ def queue_import(file_path: str):
     return token
 
 
+def queue_live(file_path: str):
+    source = Path(file_path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f'not a file: {source}')
+    LIVE_ROOT.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(16)
+    (LIVE_ROOT / f'{token}.json').write_text(
+        json.dumps({'name': source.name, 'path': str(source)}), encoding='utf-8')
+    return token
+
+
 def main():
     parser = argparse.ArgumentParser(
-        prog='ks-notebook',
-        description='Open Fieldnotes and optionally import a Markdown file.',
+        prog=Path(sys.argv[0]).name,
+        description='Open Fieldnotes and optionally import or live-preview a Markdown file.',
     )
     parser.add_argument('file', nargs='?', help='Markdown or text file to import')
+    parser.add_argument('--live', action='store_true', help='Live-preview the file instead of importing it once')
     parser.add_argument('--no-open', action='store_true', help='Print the notebook URL instead of opening a browser')
     parser.add_argument('--serve', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.serve:
         IMPORT_ROOT.mkdir(parents=True, exist_ok=True)
+        LIVE_ROOT.mkdir(parents=True, exist_ok=True)
         ThreadingHTTPServer(('127.0.0.1', PORT), NotebookHandler).serve_forever()
         return
 
+    args.live = args.live or Path(sys.argv[0]).name == 'ks-notebook-live'
+    if args.live and not args.file:
+        raise ValueError('a file is required with --live')
     ensure_server()
     url = server_url()
     if args.file:
-        token = queue_import(args.file)
-        url += f'?terminal-import={token}'
+        token = queue_live(args.file) if args.live else queue_import(args.file)
+        url += f'?terminal-{'live' if args.live else 'import'}={token}'
     if args.no_open:
         print(url)
     else:

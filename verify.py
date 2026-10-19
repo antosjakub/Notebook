@@ -14,7 +14,7 @@ checks = [
     ('required controls', all(token in html for token in (
         'id="newProject"', 'id="newNote"', 'id="renameProject"',
         'id="deleteProject"', 'id="rename"', 'id="delete"',
-        'id="vimToggle"', 'data-view="edit"', 'data-view="split"',
+        'id="vimToggle"', 'id="toggleSidebar"', 'data-view="edit"', 'data-view="split"',
         'data-view="preview"'))),
     ('transactional local persistence', all(token in app for token in (
         'localStorage.setItem(KEY, JSON.stringify(candidate))',
@@ -35,13 +35,19 @@ checks = [
         'editorBridge?.setVim(vim)', 'editorBridge?.setValue', 'editorBridge?.getValue'))),
     ('saved view and Vim preferences', all(token in app for token in (
         'preferences: { view:', 'next.preferences.view = view',
-        'next.preferences.vim = vim'))),
+        'next.preferences.vim = vim', 'next.preferences.sidebar = sidebar'))),
+    ('collapsible sidebar and projects', all(token in app for token in (
+        'function setSidebar', 'collapsedProjects', 'project-toggle', 'if (isCollapsed) continue;'))),
     ('browser regression page uses isolated storage',
         'fieldnotes.regression.test.v1' in app and 'storage=regression' in regression),
     ('terminal import launcher', all(token in launcher for token in (
-        "prog=", "'ks-notebook'", "'--serve'", "?terminal-import=", "source = Path(file_path).expanduser().resolve()",
+        "prog=", "'ks-notebook'", "'--serve'", "queue_live", "terminal-", "source = Path(file_path).expanduser().resolve()",
         "ThreadingHTTPServer(('127.0.0.1', PORT), NotebookHandler)")) and all(token in app for token in (
-        'async function importTerminalFile()', '/api/import/', "name === 'Imported'"))),
+        'async function importTerminalFile()', 'terminal-import', '/api/${', "name === 'Imported'"))),
+    ('live preview is one-way and preview-only', all(token in launcher for token in (
+        'def queue_live', "'/api/live/'", "hashlib.sha256")) and all(token in app for token in (
+        'function startLiveSync(note)', 'setInterval(refresh, 1000)', 'selectedNote()?.live',
+        "[data-view=\"edit\"], [data-view=\"split\"]"))),
     ('local asset links resolve', all((root / link.split('#')[0].split('?')[0]).is_file()
         for link in re.findall(r'(?:src|href)=["\']([^"\']+)', html, re.I)
         if link and not link.startswith(('data:', '#', 'http://', 'https://')))),
