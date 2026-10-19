@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Open Fieldnotes and optionally import a Markdown file from the terminal."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import secrets
+import subprocess
+import sys
+import time
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote, urlparse
+from urllib.request import urlopen
+import webbrowser
+
+
+APP_ROOT = Path(__file__).resolve().parent
+PORT = 43117
+DATA_ROOT = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'ks-notebook'
+IMPORT_ROOT = DATA_ROOT / 'imports'
+
+
+class NotebookHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(APP_ROOT), **kwargs)
+
+    def log_message(self, format, *args):
+        return
+
+    def do_GET(self):
+        path = urlparse(self.path).path
+        if not path.startswith('/api/import/'):
+            return super().do_GET()
+        token = unquote(path.removeprefix('/api/import/'))
+        if len(token) != 32 or any(char not in '0123456789abcdef' for char in token):
+            self.send_error(404)
+            return
+        job = IMPORT_ROOT / f'{token}.json'
+        try:
+            payload = job.read_bytes()
+            job.unlink()
+            data = json.loads(payload)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            self.send_error(404)
+            return
+        body = json.dumps(data).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def server_url():
+    return f'http://127.0.0.1:{PORT}/'
+
+
+def server_running():
+    try:
+        with urlopen(server_url(), timeout=0.2) as response:
+            return response.status == 200
+    except OSError:
+        return False
+
+
+def ensure_server():
+    if server_running():
+        return
+    subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), '--serve'],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(30):
+        time.sleep(0.1)
+        if server_running():
+            return
+    raise RuntimeError(f'could not start Fieldnotes at {server_url()}')
+
+
+def queue_import(file_path: str):
+    source = Path(file_path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f'not a file: {source}')
+    try:
+        content = source.read_text(encoding='utf-8')
+    except UnicodeDecodeError as error:
+        raise ValueError(f'{source} is not UTF-8 text') from error
+    IMPORT_ROOT.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(16)
+    job = IMPORT_ROOT / f'{token}.json'
+    job.write_text(json.dumps({'name': source.name, 'content': content}), encoding='utf-8')
+    return token
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog='ks-notebook',
+        description='Open Fieldnotes and optionally import a Markdown file.',
+    )
+    parser.add_argument('file', nargs='?', help='Markdown or text file to import')
+    parser.add_argument('--no-open', action='store_true', help='Print the notebook URL instead of opening a browser')
+    parser.add_argument('--serve', action='store_true', help=argparse.SUPPRESS)
+    args = parser.parse_args()
+
+    if args.serve:
+        IMPORT_ROOT.mkdir(parents=True, exist_ok=True)
+        ThreadingHTTPServer(('127.0.0.1', PORT), NotebookHandler).serve_forever()
+        return
+
+    ensure_server()
+    url = server_url()
+    if args.file:
+        token = queue_import(args.file)
+        url += f'?terminal-import={token}'
+    if args.no_open:
+        print(url)
+    else:
+        webbrowser.open(url)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (FileNotFoundError, RuntimeError, ValueError) as error:
+        print(f'ks-notebook: {error}', file=sys.stderr)
+        raise SystemExit(1)

@@ -8,7 +8,7 @@ const preview = $('#preview');
 const tree = $('#tree');
 const storageMode = new URLSearchParams(location.search).get('storage');
 const KEY = storageMode === 'regression' ? 'fieldnotes.regression.test.v1' : 'fieldnotes.v1';
-const EMPTY = { projects: [], notes: [], preferences: { view: 'split', vim: false } };
+const EMPTY = { projects: [], notes: [], preferences: { view: 'split', vim: true } };
 
 let state = structuredClone(EMPTY);
 let current = null;
@@ -327,6 +327,36 @@ $('#vimToggle').onchange = event => {
   if (commit(next => { next.preferences.vim = vim; })) say(vim ? 'Vim mode: Normal' : 'Vim mode off');
 };
 
+async function importTerminalFile() {
+  const url = new URL(location.href);
+  const token = url.searchParams.get('terminal-import');
+  if (!token) return;
+  url.searchParams.delete('terminal-import');
+  history.replaceState(null, '', url);
+  try {
+    const response = await fetch(`/api/import/${encodeURIComponent(token)}`, { cache: 'no-store' });
+    if (!response.ok) throw Error('the queued import was not found');
+    const file = await response.json();
+    if (typeof file?.name !== 'string' || typeof file?.content !== 'string') throw Error('the queued import is invalid');
+    let target;
+    const imported = commit(next => {
+      let project = next.projects.find(item => item.name === 'Imported');
+      if (!project) {
+        project = { id: makeId(), name: 'Imported' };
+        next.projects.push(project);
+      }
+      const note = { id: makeId(), project: project.id, name: file.name || 'Untitled', content: file.content };
+      next.notes.push(note);
+      target = note.id;
+    });
+    if (!imported) throw Error('the note could not be saved locally');
+    select(target);
+    say(`Imported ${file.name}`);
+  } catch (error) {
+    say(`Terminal import failed: ${error.message}`);
+  }
+}
+
 state = load();
 view = state.preferences.view;
 vim = Boolean(state.preferences.vim);
@@ -335,3 +365,4 @@ editorBridge?.setVim(vim);
 draw();
 setView(view, false);
 select(null);
+importTerminalFile();

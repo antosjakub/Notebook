@@ -8,6 +8,7 @@ root = Path(__file__).resolve().parent
 app = (root / 'app.js').read_text()
 html = (root / 'index.html').read_text()
 regression = (root / 'regression.html').read_text()
+launcher = (root / 'ks-notebook').read_text()
 
 checks = [
     ('required controls', all(token in html for token in (
@@ -37,6 +38,10 @@ checks = [
         'next.preferences.vim = vim'))),
     ('browser regression page uses isolated storage',
         'fieldnotes.regression.test.v1' in app and 'storage=regression' in regression),
+    ('terminal import launcher', all(token in launcher for token in (
+        "prog=", "'ks-notebook'", "'--serve'", "?terminal-import=", "source = Path(file_path).expanduser().resolve()",
+        "ThreadingHTTPServer(('127.0.0.1', PORT), NotebookHandler)")) and all(token in app for token in (
+        'async function importTerminalFile()', '/api/import/', "name === 'Imported'"))),
     ('local asset links resolve', all((root / link.split('#')[0].split('?')[0]).is_file()
         for link in re.findall(r'(?:src|href)=["\']([^"\']+)', html, re.I)
         if link and not link.startswith(('data:', '#', 'http://', 'https://')))),
