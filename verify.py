@@ -31,6 +31,9 @@ checks = [
         'function escapeHtml(text)', "https?:\\/\\/", 'rel="noopener noreferrer"'))),
     ('Markdown tables', all(token in app for token in (
         'const tableRow = line', 'const tableSeparator = line', '<table><thead>', '<tbody>'))),
+    ('Mermaid diagrams', all(token in app for token in (
+        'FIELDNOTESMERMAID', 'function renderMermaid', 'window.mermaid.render',
+        'securityLevel: \'strict\'', 'mermaid-block')) and 'vendor/mermaid/mermaid.min.js' in html),
     ('CodeMirror Vim integration', all(token in html for token in (
         'codemirror.min.js', 'mode/markdown/markdown.min.js', 'keymap/vim.min.js',
         'fieldnotes-editor.js', 'id="editorModeBadge"')) and all(token in app for token in (

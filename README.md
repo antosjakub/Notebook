@@ -12,11 +12,13 @@ After installing the launcher, run `ks-notebook diplom.md` from any folder. It r
 
 Run `ks-notebook-live diplom.md` for a one-way live preview. Saving the file in Neovim updates the notebook preview within about a second. Live notes always open in Preview, and their Edit and Split controls are disabled; the terminal file remains the source of truth.
 
-Vim mode is enabled by default and uses CodeMirror's full Vim keymap. Normal mode uses a block cursor, Insert mode uses a line cursor, and the badge above the editor reports the current mode. The toggle remembers your choice. The renderer supports headings, paragraphs, tables, lists, fenced code, emphasis, inline code, LaTeX, and HTTP(S) links; it escapes raw HTML.
+Vim mode is enabled by default and uses CodeMirror's full Vim keymap. Normal mode uses a block cursor, Insert mode uses a line cursor, and the badge above the editor reports the current mode. The toggle remembers your choice. The renderer supports headings, paragraphs, tables, lists, fenced code, Mermaid diagrams, emphasis, inline code, LaTeX, and HTTP(S) links; it escapes raw HTML.
 
 Writes use candidate-state transactions. If local storage rejects a write, committed data is left unchanged and the text remains in the editor with an unsaved-status message. A later edit retries the save.
 
 LaTeX uses KaTeX 0.16.22, as in MindGraph: write `$E=mc^2$` for inline math and `$$...$$` for display equations (including multiple lines). Math inside code examples stays literal. The renderer and fonts are bundled locally for offline use; imports and exports retain the original TeX source.
+
+Mermaid diagrams use the standard fenced form, for example ` ```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n``` `. They render in Preview while the original Mermaid source remains unchanged in the editor and in exports. The Mermaid browser bundle is included locally, so diagrams do not require a network connection.
 
 ## Checks and limitations
 

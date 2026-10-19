@@ -77,5 +77,13 @@ cases.push(['Markdown tables',async()=>{
   assert($('#preview td strong')?.textContent==='A','table Markdown absent');
   assert($('#preview td .katex'),'table LaTeX absent');
 }]);
+cases.push(['Mermaid diagrams',async()=>{
+  await reset();click('#tree .note');
+  const diagram='```mermaid\\nflowchart LR\\n  A[Start] --> B[Finish]\\n```';
+  edit(diagram);await wait(600);
+  assert($('#preview .mermaid-block svg'),'Mermaid SVG absent');
+  assert(!$('#preview pre'),'Mermaid fence rendered as code');
+  assert(cm().getValue()===diagram,'Mermaid source changed');
+}]);
 for(const [name,fn] of cases){try{await fn();passed++;line('PASS '+name)}catch(e){failed++;line('FAIL '+name+': '+(e.stack||e))}finally{restore()}}}catch(e){failed++;line('FAIL harness setup: '+(e.stack||e))}restore();out.textContent+='\nRESULT '+(failed?'FAIL':'PASS')+' — '+passed+' passed, '+failed+' failed';out.dataset.result=failed?'fail':'pass'})();
 </script></html>

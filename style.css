@@ -179,6 +179,9 @@ textarea:disabled { color: var(--text-faint); }
 #preview th, #preview td { padding: .45rem .65rem; border: 1px solid var(--border); text-align: left; }
 #preview th { color: var(--text); background: var(--surface-2); font-weight: 600; }
 #preview tr:nth-child(even) td { background: rgba(255, 255, 255, .025); }
+#preview .mermaid-block { margin: 1rem 0; overflow-x: auto; text-align: center; }
+#preview .mermaid-block svg { max-width: 100%; height: auto; }
+#preview .mermaid-error { margin: 1rem 0; padding: .7rem; color: var(--danger); background: var(--bg); border: 1px solid var(--danger); border-radius: var(--radius); white-space: pre-wrap; font: 13px/1.4 var(--font-mono); }
 
 .project-row { display: flex; align-items: center; }
 .project-toggle {

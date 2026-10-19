@@ -18,6 +18,7 @@ let vim = false;
 let sidebar = true;
 let saveTimer;
 let liveTimer;
+let renderGeneration = 0;
 const collapsedProjects = new Set();
 
 function editorValue() {
@@ -93,12 +94,25 @@ function inline(text) {
 }
 
 function markdown(source) {
+  // Keep Mermaid source out of the normal Markdown parser. It may contain
+  // pipes, dollar signs, and other characters that have meaning in Markdown.
+  let mermaidPrefix = 'FIELDNOTESMERMAID';
+  while (source.includes(mermaidPrefix)) mermaidPrefix += 'X';
+  const mermaid = [];
+  const withoutMermaid = source.replace(
+    /^```mermaid[ \t]*\r?\n([\s\S]*?)^```[ \t]*(?:\r?\n|$)/gim,
+    (_, diagram) => {
+      const token = mermaidPrefix + mermaid.length + 'END';
+      mermaid.push(diagram.trimEnd());
+      return token;
+    },
+  );
   // Protect TeX from Markdown emphasis and line splitting, while leaving code
   // examples literal. Use a prefix absent from the source to avoid collisions.
   let prefix = 'FIELDNOTESMATH';
-  while (source.includes(prefix)) prefix += 'X';
+  while (withoutMermaid.includes(prefix)) prefix += 'X';
   const math = [];
-  const processed = source.replace(
+  const processed = withoutMermaid.replace(
     /^```[^\n]*(?:\n[\s\S]*?^```[^\n]*(?=\n|$)|[\s\S]*$)|`[^`\n]+`|\\\$|\$\$([\s\S]+?)\$\$|(?<!\$)\$(?!\$)([^\n$]+?)\$(?!\$)/gm,
     (match, display, inlineMath) => {
       if (display === undefined && inlineMath === undefined) return match;
@@ -116,10 +130,17 @@ function markdown(source) {
       return token;
     },
   );
-  return markdownBlocks(processed).replace(
+  const html = markdownBlocks(processed).replace(
     new RegExp(prefix + '(\\d+)END', 'g'),
     (_, index) => math[Number(index)],
   );
+  return {
+    html: html.replace(
+      new RegExp(mermaidPrefix + '(\\d+)END', 'g'),
+      (_, index) => `<div class="mermaid-block" data-mermaid-index="${index}"></div>`,
+    ),
+    mermaid,
+  };
 }
 
 function markdownBlocks(source) {
@@ -185,8 +206,37 @@ function markdownBlocks(source) {
   return output.join('\n');
 }
 
+async function renderMermaid(diagrams, generation) {
+  const blocks = [...preview.querySelectorAll('.mermaid-block')];
+  if (!blocks.length) return;
+  if (!window.mermaid) {
+    blocks.forEach(block => {
+      block.className = 'mermaid-error';
+      block.textContent = 'Mermaid renderer unavailable';
+    });
+    return;
+  }
+  window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
+  await Promise.all(blocks.map(async (block, index) => {
+    try {
+      const result = await window.mermaid.render(`fieldnotes-mermaid-${generation}-${index}`, diagrams[index]);
+      if (generation !== renderGeneration) return;
+      block.innerHTML = result.svg;
+      result.bindFunctions?.(block);
+    } catch (error) {
+      if (generation !== renderGeneration) return;
+      block.className = 'mermaid-error';
+      block.textContent = `Mermaid error: ${error.message || error}`;
+    }
+  }));
+}
+
 function render() {
-  preview.innerHTML = current ? markdown(editorValue()) : '';
+  renderGeneration += 1;
+  const generation = renderGeneration;
+  const result = current ? markdown(editorValue()) : { html: '', mermaid: [] };
+  preview.innerHTML = result.html;
+  renderMermaid(result.mermaid, generation);
 }
 
 function setView(nextView, save = true) {
