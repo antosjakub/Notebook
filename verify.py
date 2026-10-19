@@ -28,9 +28,10 @@ checks = [
         'new Blob([note.content]'))),
     ('safe Markdown rendering', all(token in app for token in (
         'function escapeHtml(text)', "https?:\\/\\/", 'rel="noopener noreferrer"'))),
-    ('Vim normal-mode edits are bounded', all(token in app for token in (
-        'function moveVertical', "event.key === 'x'", "event.key === 'd' && event.ctrlKey",
-        'event.preventDefault()', 'editor.setRangeText'))),
+    ('CodeMirror Vim integration', all(token in html for token in (
+        'codemirror.min.js', 'mode/markdown/markdown.min.js', 'keymap/vim.min.js',
+        'fieldnotes-editor.js', 'id="editorModeBadge"')) and all(token in app for token in (
+        'editorBridge?.setVim(vim)', 'editorBridge?.setValue', 'editorBridge?.getValue'))),
     ('saved view and Vim preferences', all(token in app for token in (
         'preferences: { view:', 'next.preferences.view = view',
         'next.preferences.vim = vim'))),
@@ -38,7 +39,7 @@ checks = [
         'fieldnotes.regression.test.v1' in app and 'storage=regression' in regression),
     ('local asset links resolve', all((root / link.split('#')[0].split('?')[0]).is_file()
         for link in re.findall(r'(?:src|href)=["\']([^"\']+)', html, re.I)
-        if link and not link.startswith(('data:', '#')))),
+        if link and not link.startswith(('data:', '#', 'http://', 'https://')))),
 ]
 
 for name, passed in checks:

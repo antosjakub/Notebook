@@ -3,6 +3,7 @@
 const $ = selector => document.querySelector(selector);
 const status = $('#status');
 const editor = $('#editor');
+const editorBridge = window.FieldnotesEditor;
 const preview = $('#preview');
 const tree = $('#tree');
 const storageMode = new URLSearchParams(location.search).get('storage');
@@ -14,8 +15,11 @@ let current = null;
 let activeProject = null;
 let view = 'split';
 let vim = false;
-let mode = 'normal';
 let saveTimer;
+
+function editorValue() {
+  return editorBridge?.getValue() ?? editor.value;
+}
 
 function say(message) {
   status.textContent = message;
@@ -125,13 +129,14 @@ function markdown(source) {
 }
 
 function render() {
-  preview.innerHTML = current ? markdown(editor.value) : '';
+  preview.innerHTML = current ? markdown(editorValue()) : '';
 }
 
 function setView(nextView, save = true) {
   view = nextView;
   $('#panes').className = `view-${view}`;
   document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
+  requestAnimationFrame(() => editorBridge?.refresh());
   if (save) commit(next => { next.preferences.view = view; });
 }
 
@@ -160,6 +165,8 @@ function select(id) {
   if (note) activeProject = note.project;
   editor.disabled = !note;
   editor.value = note?.content || '';
+  editorBridge?.setDisabled(!note);
+  editorBridge?.setValue(note?.content || '');
   $('#title').textContent = note?.name || 'Choose a note';
   render();
   draw();
@@ -238,7 +245,7 @@ $('#delete').onclick = () => {
 editor.addEventListener('input', () => {
   if (!current) return;
   render();
-  queueSave(current, editor.value);
+  queueSave(current, editorValue());
 });
 
 document.querySelectorAll('[data-view]').forEach(button => {
@@ -286,79 +293,15 @@ $('#export').onclick = () => {
 
 $('#vimToggle').onchange = event => {
   vim = event.target.checked;
-  mode = 'normal';
+  editorBridge?.setVim(vim);
   if (commit(next => { next.preferences.vim = vim; })) say(vim ? 'Vim mode: Normal' : 'Vim mode off');
 };
-
-function lineStart(value, position) { return position === 0 ? 0 : value.lastIndexOf('\n', position - 1) + 1; }
-function lineEnd(value, position) {
-  const end = value.indexOf('\n', position);
-  return end < 0 ? value.length : end;
-}
-function moveVertical(value, position, direction) {
-  const start = lineStart(value, position);
-  const column = position - start;
-  if (direction < 0) {
-    if (start === 0) return 0;
-    const previousEnd = start - 1;
-    const previousStart = lineStart(value, previousEnd);
-    return Math.min(previousStart + column, previousEnd);
-  }
-  const end = lineEnd(value, position);
-  if (end === value.length) return value.length;
-  const nextStart = end + 1;
-  return Math.min(nextStart + column, lineEnd(value, nextStart));
-}
-
-editor.addEventListener('keydown', event => {
-  if (!vim || event.ctrlKey || event.metaKey || event.altKey) {
-    if (vim && event.key === 'd' && event.ctrlKey) {
-      event.preventDefault();
-      editor.scrollTop += Math.max(1, editor.clientHeight / 2);
-    }
-    return;
-  }
-  if (mode === 'insert') {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      mode = 'normal';
-      say('-- NORMAL --');
-    }
-    return;
-  }
-  const value = editor.value;
-  const position = editor.selectionStart;
-  const moves = {
-    h: () => Math.max(0, position - 1),
-    l: () => Math.min(value.length, position + 1),
-    j: () => moveVertical(value, position, 1),
-    k: () => moveVertical(value, position, -1),
-    '0': () => lineStart(value, position),
-    $: () => Math.max(lineStart(value, position), lineEnd(value, position) - 1),
-  };
-  if (event.key === 'i' || event.key === 'a') {
-    event.preventDefault();
-    if (event.key === 'a' && editor.selectionStart === editor.selectionEnd) {
-      const after = Math.min(value.length, position + 1);
-      editor.setSelectionRange(after, after);
-    }
-    mode = 'insert';
-    say('-- INSERT --');
-  } else if (moves[event.key]) {
-    event.preventDefault();
-    const next = moves[event.key]();
-    editor.setSelectionRange(next, next);
-  } else if (event.key === 'x' && position < value.length) {
-    event.preventDefault();
-    editor.setRangeText('', position, position + 1, 'start');
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-});
 
 state = load();
 view = state.preferences.view;
 vim = Boolean(state.preferences.vim);
 $('#vimToggle').checked = vim;
+editorBridge?.setVim(vim);
 draw();
 setView(view, false);
 select(null);
