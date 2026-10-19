@@ -169,6 +169,7 @@ textarea:disabled { color: var(--text-faint); }
 #preview code { font-family: var(--font-mono); background: var(--surface-3); border-radius: 4px; padding: .1em .3em; }
 #preview pre { overflow: auto; padding: .8rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); }
 #preview pre code { padding: 0; background: transparent; }
+#preview .katex-display { overflow-x: auto; overflow-y: hidden; padding: .3rem 0; }
 
 .project, .note {
   display: block;

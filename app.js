@@ -90,6 +90,36 @@ function inline(text) {
 }
 
 function markdown(source) {
+  // Protect TeX from Markdown emphasis and line splitting, while leaving code
+  // examples literal. Use a prefix absent from the source to avoid collisions.
+  let prefix = 'FIELDNOTESMATH';
+  while (source.includes(prefix)) prefix += 'X';
+  const math = [];
+  const processed = source.replace(
+    /^```[^\n]*(?:\n[\s\S]*?^```[^\n]*(?=\n|$)|[\s\S]*$)|`[^`\n]+`|\\\$|\$\$([\s\S]+?)\$\$|(?<!\$)\$(?!\$)([^\n$]+?)\$(?!\$)/gm,
+    (match, display, inlineMath) => {
+      if (display === undefined && inlineMath === undefined) return match;
+      const tex = (display ?? inlineMath).trim();
+      const token = prefix + math.length + 'END';
+      try {
+        math.push(window.katex.renderToString(tex, {
+          displayMode: display !== undefined,
+          throwOnError: false,
+          trust: false,
+        }));
+      } catch {
+        math.push('<code>' + escapeHtml(tex) + '</code>');
+      }
+      return token;
+    },
+  );
+  return markdownBlocks(processed).replace(
+    new RegExp(prefix + '(\\d+)END', 'g'),
+    (_, index) => math[Number(index)],
+  );
+}
+
+function markdownBlocks(source) {
   const lines = source.split(/\r?\n/);
   const output = [];
   let paragraph = [];

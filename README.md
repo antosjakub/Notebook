@@ -8,6 +8,8 @@ The Vim checkbox enables CodeMirror's full Vim keymap. Normal mode uses a block 
 
 Writes use candidate-state transactions. If local storage rejects a write, committed data is left unchanged and the text remains in the editor with an unsaved-status message. A later edit retries the save.
 
+LaTeX uses KaTeX 0.16.22, as in MindGraph: write `$E=mc^2$` for inline math and `$$...$$` for display equations (including multiple lines). Math inside code examples stays literal. The renderer and fonts are bundled locally for offline use; imports and exports retain the original TeX source.
+
 ## Checks and limitations
 
 Run `python3 verify.py` for source and asset checks. `regression.html` is a self-contained browser regression page. It loads the real app in an iframe and uses only `fieldnotes.regression.test.v1`; it never reads or overwrites the production `fieldnotes.v1` key.

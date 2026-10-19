@@ -40,5 +40,21 @@ cases.push(['Vim keyboard routing, visual mode, undo and toggle',async()=>{
   w.FieldnotesEditor.setValue('another note');press('u',85);
   assert(instance.getValue()==='another note','undo leaked across notes');
 }]);
+cases.push(['LaTeX rendering',async()=>{
+  await reset();click('#tree .note');
+  edit('Inline $E=mc^2$ and **bold**.\n\n$$\n\\frac{a_1}{b_2}\n$$\n\n'+
+    '\x60$literal$\x60\n\n\x60\x60\x60tex\n$code$\n\x60\x60\x60');
+  assert($('#preview .katex'),'inline math absent');
+  assert($('#preview .katex-display'),'multiline display math absent');
+  assert($('#preview strong')?.textContent==='bold','Markdown broken');
+  assert($('#preview pre code').textContent==='$code$','fenced math rendered');
+  assert([...d.querySelectorAll('#preview code')].some(el=>el.textContent==='$literal$'),'inline code rendered');
+  assert(!$('#preview code .katex'),'math inside code');
+  assert(cm().getValue().includes('\\frac{a_1}{b_2}'),'source modified');
+  edit('$\\frac{a$');
+  assert($('#preview .katex-error'),'invalid TeX error absent');
+  edit('$\\href{javascript:alert(1)}{bad}$ <img src=x onerror=alert(1)>');
+  assert(!$('#preview img')&&!$('#preview a[href^="javascript:"]'),'unsafe markup rendered');
+}]);
 for(const [name,fn] of cases){try{await fn();passed++;line('PASS '+name)}catch(e){failed++;line('FAIL '+name+': '+(e.stack||e))}finally{restore()}}}catch(e){failed++;line('FAIL harness setup: '+(e.stack||e))}restore();out.textContent+='\nRESULT '+(failed?'FAIL':'PASS')+' — '+passed+' passed, '+failed+' failed';out.dataset.result=failed?'fail':'pass'})();
 </script></html>
